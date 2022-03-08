@@ -25,6 +25,16 @@
 
 /* Global variables */
 FILE *f_printers;
+FILE *f_printers_tmp;
+
+void add_printer(const char *name, const char *ip) {
+	const unsigned MAX_LENGTH = 256;
+	char line [MAX_LENGTH];
+
+	while(fgets(line, MAX_LENGTH, f_printers)) {
+		printf("%s", line);
+	}
+}
 
 
 /**
@@ -94,6 +104,7 @@ void onmessage(int fd, const unsigned char *msg, uint64_t size, int type)
 	 * again.
 	 */
 	ws_sendframe(fd, (char *)msg, size, true, type);
+	add_printer("hey", "localhost");
 }
 
 bool get_cwd(char **cwd, size_t *cwd_size) {
@@ -131,9 +142,8 @@ bool get_cwd(char **cwd, size_t *cwd_size) {
 	return false;
 }
 
-bool open_printer_file(char *cwd, size_t cwd_size, FILE **ptr) {
+bool open_printer_file(const char *file_name, char *cwd, size_t cwd_size, FILE **ptr) {
 	/* Create path for the database */
-	char *file_name = "printers.db";
 	char *file_path = malloc(cwd_size + sizeof(file_name));
 	strcpy(file_path, cwd);
 	strcpy(file_path + strlen(cwd), "/");
@@ -143,15 +153,13 @@ bool open_printer_file(char *cwd, size_t cwd_size, FILE **ptr) {
 	
 	/* Actually open the file now */
 	*ptr = fopen(file_path, "r+");
+	
+	free(file_path);
 	if (*ptr == NULL) {
-		free(file_path);
 		return false;
 	}
-
-	free(file_path);
 	return true;
 }
-
 /**
  * @brief Main routine.
  *
@@ -164,12 +172,17 @@ int main(void)
 	char* cwd = "";
 	size_t cwd_size;
 
-	get_cwd(&cwd, &cwd_size);
+	if (!get_cwd(&cwd, &cwd_size)) {
+		printf("Could not open current working directory");
+		return -1;
+	}
 	printf("Current working dir: %s\nOpening printers file...\n", cwd);
-	if (open_printer_file(cwd, cwd_size, &f_printers)) {
-		printf("Could not open file for read or write\n");
-	} else {
+	if (open_printer_file("printers.db", cwd, cwd_size, &f_printers) &&
+	    open_printer_file("printers.db.tmp", cwd, cwd_size, &f_printers_tmp)) {
 		printf("File successfully opened\n");
+	} else {
+		printf("Could not open file for read or write\n");
+		return -1;
 	}
 
 	evs.onopen    = &onopen;
