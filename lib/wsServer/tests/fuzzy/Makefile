@@ -1,4 +1,4 @@
-# Copyright (C) 2015-2020 Davidson Francis <davidsondfgl@gmail.com>
+# Copyright (C) 2016-2020 Davidson Francis <davidsondfgl@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -13,39 +13,26 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>
 
-CC      ?= gcc
-WSDIR    = $(CURDIR)/lib/wsServer
+CC       = afl-gcc
+WSDIR    = $(CURDIR)/../../
 INCLUDE  = -I $(WSDIR)/include
-CFLAGS   =  -Wall -Wextra -O2
+CFLAGS  +=  -Wall -Wextra -g -DVERBOSE_MODE -DAFL_FUZZ
 CFLAGS  +=  $(INCLUDE) -std=c99 -pthread -pedantic
 LIB      =  $(WSDIR)/libws.a
-BUILD_DIR= _build
-RM	 = rm -rf
 
-# Check if verbose examples
-ifeq ($(VERBOSE_EXAMPLES), no)
-	CFLAGS += -DDISABLE_VERBOSE
-endif
-
-.PHONY: all clean
+.PHONY: all run_fuzzy clean
 
 # Examples
-all: libws.a main
+all: ws_file run_fuzzy
 
-# Send receive
-main: src/main.c $(LIB)
-	[ -d $(BUILD_DIR) ] || mkdir $(BUILD_DIR)
-	$(CC) $(CFLAGS) $(LDFLAGS) src/main.c -o $(BUILD_DIR)/main $(LIB)
+# ws_file
+ws_file: ws_file.c $(LIB)
+	$(CC) $(CFLAGS) $(LDFLAGS) ws_file.c -o ws_file $(LIB)
 
-run:
-	@printf " --- Running executable ---\n\n"
-	@_build/main
-	@printf "\n\n --- DONE ---\n"
-
-# Library
-libws.a: $(OBJ)
-	$(AR) $(ARFLAGS) $(LIB) $^
+# Run fuzzing tests
+run_fuzzy: ws_file
+	@bash run-fuzzy.sh
 
 # Clean
 clean:
-	$(RM) _build
+	@rm -f ws_file

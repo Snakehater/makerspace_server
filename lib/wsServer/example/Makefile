@@ -1,4 +1,4 @@
-# Copyright (C) 2015-2020 Davidson Francis <davidsondfgl@gmail.com>
+# Copyright (C) 2016-2020 Davidson Francis <davidsondfgl@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -14,13 +14,11 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>
 
 CC      ?= gcc
-WSDIR    = $(CURDIR)/lib/wsServer
+WSDIR    = $(CURDIR)/../
 INCLUDE  = -I $(WSDIR)/include
 CFLAGS   =  -Wall -Wextra -O2
 CFLAGS  +=  $(INCLUDE) -std=c99 -pthread -pedantic
 LIB      =  $(WSDIR)/libws.a
-BUILD_DIR= _build
-RM	 = rm -rf
 
 # Check if verbose examples
 ifeq ($(VERBOSE_EXAMPLES), no)
@@ -30,22 +28,12 @@ endif
 .PHONY: all clean
 
 # Examples
-all: libws.a main
+all: send_receive
 
 # Send receive
-main: src/main.c $(LIB)
-	[ -d $(BUILD_DIR) ] || mkdir $(BUILD_DIR)
-	$(CC) $(CFLAGS) $(LDFLAGS) src/main.c -o $(BUILD_DIR)/main $(LIB)
-
-run:
-	@printf " --- Running executable ---\n\n"
-	@_build/main
-	@printf "\n\n --- DONE ---\n"
-
-# Library
-libws.a: $(OBJ)
-	$(AR) $(ARFLAGS) $(LIB) $^
+send_receive: send_receive.c $(LIB)
+	$(CC) $(CFLAGS) $(LDFLAGS) send_receive.c -o send_receive $(LIB)
 
 # Clean
 clean:
-	$(RM) _build
+	@rm -f send_receive
