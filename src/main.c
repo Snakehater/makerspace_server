@@ -26,7 +26,71 @@
 /* Global variables */
 FILE *f_printers;
 FILE *f_printers_tmp;
+enum PRINTER_STATE {OK = 0, BUSY = 1, NOK = 2};
+struct PRINTER {
+	char name[16];
+	char ip[16];
+	enum PRINTER_STATE state;
+};
 
+struct PRINTER split_line(char *line, long unsigned int size) {
+	long unsigned int i = 0;
+	long unsigned int j = 0;
+	struct PRINTER printer;
+	long unsigned int printer_strlen = sizeof(printer.ip);
+	char name[printer_strlen];
+	char ip[printer_strlen];
+	enum PRINTER_STATE state = NOK;
+	char buffer[printer_strlen];
+	uint8_t stage = 0;
+	char c; 
+
+	for (i = 0; i < size; i++) { // size is the size of the array, since one char is one byte, it is also the length of the array
+		c = *(line + i);
+		if (c == '&' || j >= printer_strlen) {
+			if (j > printer_strlen)
+				j--;
+			buffer[j] = '\0';
+			if (stage == 0) {
+				memcpy(name, buffer, printer_strlen);
+			} else if (stage == 1) {
+				memcpy(ip, buffer, printer_strlen);
+			} else
+				break;
+			stage++;
+			j = 0;
+		} else { // we'll jump over the '&' sign so therefor not add to buffer when c is '&'
+			buffer[j] = c;
+			j++;
+		}
+	}
+	/* Check if we have filled both the name and the ip */
+	if (stage == 2) {
+		/* Then add the state as well */
+		if (strncmp("OK", buffer, 2) == 0)
+			state = OK;
+		else if (strncmp("BUSY", buffer, 4) == 0)
+			state = BUSY;
+		else
+			state = NOK;
+	}
+	/* Now fill the struct with above data */
+	// memcpy(printer.name, name, 15);
+	// memcpy(printer.ip, ip, 15);
+	//printf("%lu \n", sizeof(printer.name));
+	memcpy(printer.name, name, printer_strlen);
+	memcpy(printer.ip, ip, printer_strlen);
+	printer.state = state;
+	return printer;
+}
+void clean_files() {
+	const unsigned MAX_LENGTH = 256;
+	char line[MAX_LENGTH];
+	while(fgets(line, MAX_LENGTH, f_printers)) {
+		struct PRINTER printer = split_line(&line[0], MAX_LENGTH);
+		printf("%s %s %u \n", printer.name, printer.ip, printer.state);
+	}
+}
 void add_printer(const char *name, const char *ip) {
 	const unsigned MAX_LENGTH = 256;
 	char line [MAX_LENGTH];
@@ -171,11 +235,13 @@ int main(void)
 	struct ws_events evs;
 	char* cwd = "";
 	size_t cwd_size;
-
+	
+	/* Get the current working directory */
 	if (!get_cwd(&cwd, &cwd_size)) {
 		printf("Could not open current working directory");
 		return -1;
 	}
+	/* Open the working files */
 	printf("Current working dir: %s\nOpening printers file...\n", cwd);
 	if (open_printer_file("printers.db", cwd, cwd_size, &f_printers) &&
 	    open_printer_file("printers.db.tmp", cwd, cwd_size, &f_printers_tmp)) {
@@ -184,6 +250,8 @@ int main(void)
 		printf("Could not open file for read or write\n");
 		return -1;
 	}
+	/* Clean the files */
+	clean_files();
 
 	evs.onopen    = &onopen;
 	evs.onclose   = &onclose;
