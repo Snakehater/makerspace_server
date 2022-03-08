@@ -18,16 +18,14 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <errno.h>
 #include <unistd.h>
+#include <string.h>
 #include <ws.h>
 
-/**
- * @dir example/
- * @brief wsServer examples folder
- *
- * @file send_receive.c
- * @brief Simple send/receiver example.
- */
+/* Global variables */
+FILE *f_printers;
+
 
 /**
  * @brief Called when a client connects to the server.
@@ -98,6 +96,62 @@ void onmessage(int fd, const unsigned char *msg, uint64_t size, int type)
 	ws_sendframe(fd, (char *)msg, size, true, type);
 }
 
+bool get_cwd(char **cwd, size_t *cwd_size) {
+	long path_max;
+	char *ptr;
+
+	path_max = pathconf(".", _PC_PATH_MAX);
+	if (path_max == -1)
+		*cwd_size = 1024;
+	else if (path_max > 10240)
+		*cwd_size = 10240;
+	else
+		*cwd_size = path_max;
+	
+
+
+	for (*cwd = ptr = NULL; ptr == NULL; *cwd_size *= 2)
+	{
+		if ((*cwd = realloc(*cwd, *cwd_size)) == NULL)
+		{
+			perror("error realloc");
+		}
+
+
+		ptr = getcwd(*cwd, *cwd_size);
+		if (ptr == NULL && errno != ERANGE)
+		{
+			perror("ERANGE");
+		}
+	}
+
+	if (ptr != NULL) {
+		return true;
+	}
+	return false;
+}
+
+bool open_printer_file(char *cwd, size_t cwd_size, FILE **ptr) {
+	/* Create path for the database */
+	char *file_name = "printers.db";
+	char *file_path = malloc(cwd_size + sizeof(file_name));
+	strcpy(file_path, cwd);
+	strcpy(file_path + strlen(cwd), "/");
+	strcpy(file_path + strlen(cwd) + 1, file_name);
+
+	printf("Database path is: %s\n", file_path);
+	
+	/* Actually open the file now */
+	*ptr = fopen(file_path, "r+");
+	if (*ptr == NULL) {
+		free(file_path);
+		return false;
+	}
+
+	free(file_path);
+	return true;
+}
+
 /**
  * @brief Main routine.
  *
@@ -107,6 +161,17 @@ void onmessage(int fd, const unsigned char *msg, uint64_t size, int type)
 int main(void)
 {
 	struct ws_events evs;
+	char* cwd = "";
+	size_t cwd_size;
+
+	get_cwd(&cwd, &cwd_size);
+	printf("Current working dir: %s\nOpening printers file...\n", cwd);
+	if (open_printer_file(cwd, cwd_size, &f_printers)) {
+		printf("Could not open file for read or write\n");
+	} else {
+		printf("File successfully opened\n");
+	}
+
 	evs.onopen    = &onopen;
 	evs.onclose   = &onclose;
 	evs.onmessage = &onmessage;
@@ -117,5 +182,6 @@ int main(void)
 	 *   ws_socket(&evs, 8080, 1)
 	 */
 
+	fclose(f_printers);
 	return (0);
 }

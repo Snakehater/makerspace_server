@@ -39,7 +39,7 @@ main: src/main.c $(LIB)
 
 run:
 	@printf " --- Running executable ---\n\n"
-	@_build/main
+	@cd _build && ./main
 	@printf "\n\n --- DONE ---\n"
 
 # Library
