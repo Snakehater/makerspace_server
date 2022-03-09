@@ -15,6 +15,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>
  */
 
+#define DISABLE_VERBOSE
+
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,8 +26,10 @@
 #include <ws.h>
 
 /* Global variables */
+const char *db_name = "printers.db";
 FILE *f_printers;
-FILE *f_printers_tmp;
+char* cwd = "";
+size_t cwd_size;
 enum PRINTER_STATE {OK = 0, BUSY = 1, NOK = 2};
 struct PRINTER {
 	char name[16];
@@ -33,6 +37,40 @@ struct PRINTER {
 	enum PRINTER_STATE state;
 };
 
+bool open_printer_file(const char *file_name, char *cwd, size_t cwd_size, FILE **ptr) {
+	/* Create path for the database */
+	char *file_path = malloc(cwd_size + sizeof(file_name));
+	strcpy(file_path, cwd);
+	strcpy(file_path + strlen(cwd), "/");
+	strcpy(file_path + strlen(cwd) + 1, file_name);
+	#ifndef DISABLE_VERBOSE
+		printf("Database path is: %s\n", file_path);
+	#endif
+	
+	/* Actually open the file now */
+	*ptr = fopen(file_path, "r+");
+	
+	free(file_path);
+	if (*ptr == NULL) {
+		return false;
+	}
+	return true;
+}
+bool reopen_db(FILE **f) {
+	if (f_printers != NULL)
+		fclose(*f);
+	if (open_printer_file(db_name, cwd, cwd_size, f)) {
+		#ifndef DISABLE_VERBOSE
+			printf("File successfully re-opened\n");
+		#endif
+		return true;
+	} else {
+		#ifndef DISABLE_VERBOSE
+			printf("Could not open file for read or write\n");
+		#endif
+		return false;
+	}
+}
 struct PRINTER split_line(char *line, long unsigned int size) {
 	long unsigned int i = 0;
 	long unsigned int j = 0;
@@ -48,7 +86,7 @@ struct PRINTER split_line(char *line, long unsigned int size) {
 	for (i = 0; i < size; i++) { // size is the size of the array, since one char is one byte, it is also the length of the array
 		c = *(line + i);
 		if (c == '&' || j >= printer_strlen) {
-			if (j > printer_strlen)
+			if (j > printer_strlen) // since we add one to j after pushing to the buffer, we want to decrease j with one to prevent stack smashing
 				j--;
 			buffer[j] = '\0';
 			if (stage == 0) {
@@ -75,29 +113,45 @@ struct PRINTER split_line(char *line, long unsigned int size) {
 			state = NOK;
 	}
 	/* Now fill the struct with above data */
-	// memcpy(printer.name, name, 15);
-	// memcpy(printer.ip, ip, 15);
-	//printf("%lu \n", sizeof(printer.name));
 	memcpy(printer.name, name, printer_strlen);
 	memcpy(printer.ip, ip, printer_strlen);
 	printer.state = state;
 	return printer;
 }
-void clean_files() {
+bool add_printer(char *printer_txt_old, size_t size) {
+	size++; /* we add one since we need to add null char */
+	char *printer_txt = calloc(size, sizeof(char));
+	memcpy(printer_txt, printer_txt_old, size - 1); /* Old buffer doesn't have room for the null character */
+	*(printer_txt + size - 1) = '\0';
+	#ifndef DISABLE_VERBOSE
+		printf("Adding %s \n", printer_txt);
+	#endif
+	reopen_db(&f_printers);
+	/* First check so it doesn't already exist */
+	struct PRINTER line_printer;
+	struct PRINTER new_printer = split_line(printer_txt, size);
 	const unsigned MAX_LENGTH = 256;
 	char line[MAX_LENGTH];
+	int i = 0;
+	fseek(f_printers, 0L, SEEK_SET);
 	while(fgets(line, MAX_LENGTH, f_printers)) {
-		struct PRINTER printer = split_line(&line[0], MAX_LENGTH);
-		printf("%s %s %u \n", printer.name, printer.ip, printer.state);
+		i++;
+		line_printer = split_line(line, MAX_LENGTH);
+		if (strncmp(new_printer.name, line_printer.name, size) == 0) {
+			#ifndef DISABLE_VERBOSE
+				printf("\nPrinter already exists\n");
+			#endif
+			free(printer_txt);
+			return false;
+		}
 	}
-}
-void add_printer(const char *name, const char *ip) {
-	const unsigned MAX_LENGTH = 256;
-	char line [MAX_LENGTH];
 
-	while(fgets(line, MAX_LENGTH, f_printers)) {
-		printf("%s", line);
-	}
+	fseek(f_printers, 0L, SEEK_END);
+	fprintf(f_printers, printer_txt);
+	fprintf(f_printers, "\n");
+	fflush(f_printers);
+	free(printer_txt);
+	return true;
 }
 
 
@@ -149,6 +203,8 @@ void onclose(int fd)
  *
  * @param type Message type.
  */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 void onmessage(int fd, const unsigned char *msg, uint64_t size, int type)
 {
 	char *cli;
@@ -159,6 +215,25 @@ void onmessage(int fd, const unsigned char *msg, uint64_t size, int type)
 #endif
 	free(cli);
 
+	if (size == 0) {
+		ws_sendframe_txt(fd, "PING", false);
+		return;
+	}
+
+	if (strncmp((char*)msg, "add", 3) == 0) {
+		size_t p_txtsize = size - 4; /* size minus "add#" */
+		char *printer_txt = calloc(p_txtsize, sizeof(char)); 
+		memcpy(printer_txt, msg + 4, p_txtsize);
+		if (add_printer(printer_txt, p_txtsize))
+			ws_sendframe_txt(fd, "OK\n", false);
+		else
+			ws_sendframe_txt(fd, "NOK\n", false);
+		free(printer_txt);
+	} else {
+		ws_sendframe_txt(fd, "Invalid command\n", false);
+		return;
+	}
+
 	/**
 	 * Mimicks the same frame type received and re-send it again
 	 *
@@ -167,9 +242,9 @@ void onmessage(int fd, const unsigned char *msg, uint64_t size, int type)
 	 * and re-sending the very same frame type and content
 	 * again.
 	 */
-	ws_sendframe(fd, (char *)msg, size, true, type);
-	add_printer("hey", "localhost");
+	//ws_sendframe(fd, (char *)msg, size, true, type);
 }
+#pragma GCC diagnostic pop
 
 bool get_cwd(char **cwd, size_t *cwd_size) {
 	long path_max;
@@ -206,24 +281,6 @@ bool get_cwd(char **cwd, size_t *cwd_size) {
 	return false;
 }
 
-bool open_printer_file(const char *file_name, char *cwd, size_t cwd_size, FILE **ptr) {
-	/* Create path for the database */
-	char *file_path = malloc(cwd_size + sizeof(file_name));
-	strcpy(file_path, cwd);
-	strcpy(file_path + strlen(cwd), "/");
-	strcpy(file_path + strlen(cwd) + 1, file_name);
-
-	printf("Database path is: %s\n", file_path);
-	
-	/* Actually open the file now */
-	*ptr = fopen(file_path, "r+");
-	
-	free(file_path);
-	if (*ptr == NULL) {
-		return false;
-	}
-	return true;
-}
 /**
  * @brief Main routine.
  *
@@ -233,8 +290,6 @@ bool open_printer_file(const char *file_name, char *cwd, size_t cwd_size, FILE *
 int main(void)
 {
 	struct ws_events evs;
-	char* cwd = "";
-	size_t cwd_size;
 	
 	/* Get the current working directory */
 	if (!get_cwd(&cwd, &cwd_size)) {
@@ -243,15 +298,12 @@ int main(void)
 	}
 	/* Open the working files */
 	printf("Current working dir: %s\nOpening printers file...\n", cwd);
-	if (open_printer_file("printers.db", cwd, cwd_size, &f_printers) &&
-	    open_printer_file("printers.db.tmp", cwd, cwd_size, &f_printers_tmp)) {
+	if (open_printer_file(db_name, cwd, cwd_size, &f_printers)) {
 		printf("File successfully opened\n");
 	} else {
 		printf("Could not open file for read or write\n");
 		return -1;
 	}
-	/* Clean the files */
-	clean_files();
 
 	evs.onopen    = &onopen;
 	evs.onclose   = &onclose;
