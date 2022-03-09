@@ -153,6 +153,28 @@ bool add_printer(char *printer_txt_old, size_t size) {
 	free(printer_txt);
 	return true;
 }
+void get_printers(char **response, size_t *response_size) {
+	long unsigned int i = 0;
+	char c;
+	reopen_db(&f_printers);
+	fseek(f_printers, 0L, SEEK_END);
+	*response_size = ftell(f_printers);
+	fseek(f_printers, 0L, SEEK_SET);
+
+	*response = calloc(*response_size + 1, sizeof(char));
+	while(1) {
+		c = fgetc(f_printers);
+		if (c == EOF)
+			break;
+		*(*response + i) = c;
+		i++;
+
+		printf("%c", c);
+	}
+	*(response + *response_size) = '\0';
+}
+	
+
 
 
 /**
@@ -208,6 +230,8 @@ void onclose(int fd)
 void onmessage(int fd, const unsigned char *msg, uint64_t size, int type)
 {
 	char *cli;
+	char *response;
+	size_t response_size = 0;
 	cli = ws_getaddress(fd);
 #ifndef DISABLE_VERBOSE
 	printf("I receive a message: %s (size: %" PRId64 ", type: %d), from: %s/%d\n",
@@ -220,7 +244,7 @@ void onmessage(int fd, const unsigned char *msg, uint64_t size, int type)
 		return;
 	}
 
-	if (strncmp((char*)msg, "add", 3) == 0) {
+	if (strncmp((char*)msg, "add#", 4) == 0) {
 		size_t p_txtsize = size - 4; /* size minus "add#" */
 		char *printer_txt = calloc(p_txtsize, sizeof(char)); 
 		memcpy(printer_txt, msg + 4, p_txtsize);
@@ -229,6 +253,11 @@ void onmessage(int fd, const unsigned char *msg, uint64_t size, int type)
 		else
 			ws_sendframe_txt(fd, "NOK\n", false);
 		free(printer_txt);
+	} else if (strncmp((char*)msg, "get#", 4) == 0) {
+		ws_sendframe_txt(fd, "Getting\n", false);
+		get_printers(&response, &response_size);
+		ws_sendframe_txt(fd, response, false);
+		free(response);
 	} else {
 		ws_sendframe_txt(fd, "Invalid command\n", false);
 		return;
