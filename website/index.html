@@ -1,98 +1,114 @@
-<!--
-Copyright (C) 2016-2020  Davidson Francis <davidsondfgl@gmail.com>
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program.  If not, see <http://www.gnu.org/licenses/>
--->
-<html>
-<head>
+<!DOCTYPE html>
+<html lang="en">
+	<meta charset="UTF-8">
+	<title>Page Title</title>
+	<meta name="viewport" content="width=device-width,initial-scale=1">
+	<link rel="stylesheet" href="css/style.css">
+	<style>
+	</style>
+	<body>
+		<header>
+			<input type="button" id="btConn" name="btConn" value="Connect!"><br /><br />
+		</header>
+		<main id="printers_container"></main>
+	</body>
 	<script>
 
-	/* WebSocket. */
-	var ws;
-	var connected = false;
+		/* WebSocket. */
+		var ws;
+		var connected = false;
+		var server_addr = "ws://localhost:8080";
+		var s_callback;
+		var printers = []
 
-	function scoll_to_bottom()
-	{
-		var logTa = document.getElementById("taLog")
-		logTa.scrollTop = logTa.scrollHeight;
-    }
+		function f_get_printers() {
+			ws.send("get#");
+		}
+		function f_printers_callback(msg) {
+			if (msg.substring(0, 7) == "Invalid")
+				return;
+			printers = [];
+			printers_tmp = msg.split("\n");
 
-	/* Establish connection. */
-	function doConnect(addr)
-	{
-		/* Message to be sent. */
-		var msg;
+			for (var i = 0; i < printers_tmp.length; i++) {
+				printer_tmp = printers_tmp[i].split("&");
+				if(printer_tmp.length > 1)
+					printers.push(printer_tmp);
+			}
 
-		/* Do connection. */
-		ws = new WebSocket(addr);
+			layout_printers();
+		}
+		function layout_printers() {
+			var container = document.getElementById("printers_container");
+			container.innerHTML = '';
+			// iterate over printers and create elements for each printer
+			for (var i = 0; i < printers.length; i++) {
+				var printer = printers[i];
+				var div = document.createElement("div");
+				div.className = "printer " + printer[2].toLowerCase();
+				var img = document.createElement("img");
+				img.src = "http://" + printer[1] + "/webcam/?action=stream";
+				div.appendChild(img);
+				
+				var t = document.createElement("h3");
+				t.innerHTML = printer[0];
+				div.appendChild(t);
 
-		/* Register events. */
-		ws.onopen = function()
+				container.appendChild(div);
+			}
+		}
+			
+
+		/* Establish connection. */
+		function doConnect()
 		{
-			connected = true;
-			document.getElementById("btConn").value = "Disconnect!";
-			document.getElementById("taLog").value += ("Connection opened\n");
-			scoll_to_bottom();
-		};
+			/* Message to be sent. */
+			var msg;
 
-		/* Deals with messages. */
-		ws.onmessage = function (evt)
-		{
-			document.getElementById("taLog").value += ("Recv: " + evt.data + "\n");
-			scoll_to_bottom();
-		};
+			/* Do connection. */
+			ws = new WebSocket(server_addr);
 
-		/* Close events. */
-		ws.onclose = function(event)
-		{
-			document.getElementById("btConn").value = "Connect!";
-			document.getElementById("taLog").value +=
-				("Connection closed: wasClean: " + event.wasClean + ", evCode: "
-					+ event.code + "\n");
-			scoll_to_bottom();
-			connected = false;
-		};
-	}
+			/* Register events. */
+			ws.onopen = function()
+			{
+				connected = true;
 
-	document.addEventListener("DOMContentLoaded", function(event)
-	{
+				f_get_printers();
+				s_callback = f_printers_callback;
+			};
+
+			/* Deals with messages. */
+			ws.onmessage = function (evt)
+			{
+				s_callback(evt.data);
+			};
+
+			/* Close events. */
+			ws.onclose = function(event)
+			{
+				console.log("Connection closed: wasClean: " + event.wasClean + ", evCode: " + event.code + "\n");
+				connected = false;
+			};
+		}
+
 		/* Connect buttom. */
 		document.getElementById("btConn").onclick = function()
 		{
 			if (connected == false)
 			{
-				var txt = document.getElementById("txtServer").value;
-				doConnect(txt);
+				doConnect();
 			}
 
 			else
 			{
 				ws.close();
 				connected = false;
-				document.getElementById("btConn").value = "Connect!";
 			}
 		};
 
-		/* Input text message. */
-		document.getElementById("txtMsg").addEventListener('keyup', function(e)
-		{
-			var key = e.which || e.keyCode;
-			if (key == 13)
-				document.getElementById("btMsg").click();
-		});
 
 		/* Send message. */
+		/*
 		document.getElementById("btMsg").onclick = function()
 		{
 			if (connected == true)
@@ -106,32 +122,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>
 				scoll_to_bottom();
 			}
 		};
-	});
+		*/
+		window.onload = function() {
+			doConnect();
+			console.log("load");
+		}
 	</script>
-</head>
-<body>
-
-	<div id="header">
-		<h1 align="left">wsServer</h1>
-		Server: <input type="text" id="txtServer" value="ws://localhost:8080">
-		<input type="button" id="btConn" name="btConn" value="Connect!"><br /><br />
-
-		Connection type:
-		<input type="radio" name="port" id="port1" checked="true" value="ws:// (8080)"
-			onclick="document.getElementById('txtServer').value='ws://localhost:8080'">
-		<label for="port1">ws:// (8080)</label>
-
-		<input type="radio" name="port" id="port2" value="wss:// (443)"
-			onclick="document.getElementById('txtServer').value='ws://localhost:443'">
-		<label for="port2">wss:// (443)</label>
-
-		<br /> <br />
-
-		Message: <input type="text" id="txtMsg" value=""
-			placeholder="Type your message (ENTER to send)">
-		<input type="button" id="btMsg" name="btMsg" value="Send"><br /><br />
-
-		<textarea rows="10" cols="50" id="taLog" name="taLog"></textarea>
-	</div>
-</body>
 </html>

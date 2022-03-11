@@ -1,0 +1,67 @@
+* {
+	margin: 0;
+	font-family: Inter, Helvetica, sans-serif;
+	font-weight: bold;
+}
+/* hide scrollbar but allow scrolling */
+* {
+    -ms-overflow-style: none; /* for Internet Explorer, Edge */
+    scrollbar-width: none; /* for Firefox */
+    overflow-y: scroll; 
+}
+
+*::-webkit-scrollbar {
+    display: none; /* for Chrome, Safari, and Opera */
+}
+
+
+body {
+	width: 100vw;
+	height: 100vh;
+	display: flex;
+	flex-direction: column;
+}
+header {
+	width: 100vw;
+	height: 5vh;
+}
+#printers_container {
+	height: 95vh;
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(10vw, 20vw));
+	grid-template-rows: repeat(auto-fill, auto);
+	grid-row-gap: 1rem;
+	grid-column-gap: 1rem;
+	padding: 1rem;
+	justify-content: center;
+}
+.printer {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	border: 5px solid rgba(0, 0, 0, 0.1);
+	border-radius: 5px;
+	padding: 1rem;
+	padding-bottom: 0.5rem;
+	background: rgba(0, 0, 0, 0.2);
+}
+.printer img {
+	object-fit: cover;
+	max-width: 100%;
+	max-height: 100%;
+	padding: 0.5rem;
+	border-radius: 5px;
+}
+.printer :not(:first-child) {
+	padding: 0.5rem;
+}
+.printer.ok img {
+	background: green;
+}
+.printer.busy img {
+	background: yellow;
+}
+.printer.nok img {
+	background: red;
+}

@@ -254,7 +254,6 @@ void onmessage(int fd, const unsigned char *msg, uint64_t size, int type)
 			ws_sendframe_txt(fd, "NOK\n", false);
 		free(printer_txt);
 	} else if (strncmp((char*)msg, "get#", 4) == 0) {
-		ws_sendframe_txt(fd, "Getting\n", false);
 		get_printers(&response, &response_size);
 		ws_sendframe_txt(fd, response, false);
 		free(response);
